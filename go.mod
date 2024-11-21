@@ -3,7 +3,7 @@ module github.com/nasa9084/switchbot-exporter
 go 1.19
 
 require (
-	github.com/nasa9084/go-switchbot/v3 v3.1.0
+	github.com/nasa9084/go-switchbot/v3 v3.2.0
 	github.com/prometheus/client_golang v1.20.5
 )
 
@@ -11,7 +11,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/uuid v1.3.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect

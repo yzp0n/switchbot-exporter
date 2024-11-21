@@ -109,6 +109,8 @@ func run() error {
 			switchbot.MeterPlus:  {},
 			switchbot.PlugMiniJP: {},
 			switchbot.WoIOSensor: {},
+			switchbot.MeterPro:   {},
+			"MeterPro(CO2)":      {},
 		}
 
 		data := make([]StaticConfig, len(devices))
