@@ -17,6 +17,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+const MeterProCO2 = "MeterPro(CO2)"
+
 var (
 	listenAddress = flag.String("web.listen-address", ":8080", "The address to listen on for HTTP requests")
 	openToken     = flag.String("switchbot.open-token", "", "The open token for switchbot-api")
@@ -28,6 +30,16 @@ var deviceLabels = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Namespace: "switchbot",
 	Name:      "device",
 }, []string{"device_id", "device_name"})
+
+var possibleOpenState = []switchbot.OpenState{
+	switchbot.ContactOpen,
+	switchbot.ContactClose,
+	switchbot.ContactTimeoutNotClose,
+}
+var possibleAmbientBrightness = []switchbot.AmbientBrightness{
+	switchbot.AmbientBrightnessBright,
+	switchbot.AmbientBrightnessDim,
+}
 
 // the type expected by the prometheus http service discovery
 type StaticConfig struct {
@@ -103,14 +115,15 @@ func run() error {
 		log.Printf("discovered device count: %d", len(devices))
 
 		supportedDeviceTypes := map[switchbot.PhysicalDeviceType]struct{}{
-			switchbot.Hub2:       {},
-			switchbot.Humidifier: {},
-			switchbot.Meter:      {},
-			switchbot.MeterPlus:  {},
-			switchbot.PlugMiniJP: {},
-			switchbot.WoIOSensor: {},
-			switchbot.MeterPro:   {},
-			"MeterPro(CO2)":      {},
+			switchbot.Hub2:          {},
+			switchbot.Humidifier:    {},
+			switchbot.Meter:         {},
+			switchbot.MeterPlus:     {},
+			switchbot.PlugMiniJP:    {},
+			switchbot.WoIOSensor:    {},
+			switchbot.MeterPro:      {},
+			MeterProCO2:             {},
+			switchbot.ContactSensor: {},
 		}
 
 		data := make([]StaticConfig, len(devices))
@@ -172,7 +185,7 @@ func run() error {
 		log.Printf("got device status: %s", target)
 
 		switch status.Type {
-		case switchbot.Meter, switchbot.MeterPlus, switchbot.Hub2, switchbot.WoIOSensor, switchbot.Humidifier:
+		case switchbot.Meter, switchbot.MeterPlus, switchbot.Hub2, switchbot.WoIOSensor, switchbot.Humidifier, switchbot.MeterPro, MeterProCO2:
 			meterHumidity := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: "switchbot",
 				Subsystem: "meter",
@@ -185,11 +198,56 @@ func run() error {
 				Name:      "temperature",
 			}, []string{"device_id"})
 
+			if status.Type == MeterProCO2 {
+				meterCO2 := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+					Namespace: "switchbot",
+					Subsystem: "meter",
+					Name:      "co2",
+				}, []string{"device_id"})
+
+				registry.MustRegister(meterCO2)
+				meterCO2.WithLabelValues(status.ID).Set(float64(status.CO2))
+			}
+
 			registry.MustRegister(deviceLabels) // register global device labels cache
 			registry.MustRegister(meterHumidity, meterTemperature)
 
 			meterHumidity.WithLabelValues(status.ID).Set(float64(status.Humidity))
 			meterTemperature.WithLabelValues(status.ID).Set(status.Temperature)
+		case switchbot.ContactSensor:
+			contactSensorOpenState := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: "switchbot",
+				Subsystem: "contact_sensor",
+				Name:      "open_state",
+			}, []string{"device_id", "state"})
+			contactSensorBrightness := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: "switchbot",
+				Subsystem: "contact_sensor",
+				Name:      "brightness",
+			}, []string{"device_id", "brightness"})
+			registry.MustRegister(deviceLabels)
+			registry.MustRegister(contactSensorOpenState, contactSensorBrightness)
+
+			for _, os := range possibleOpenState {
+				var value float64
+				if status.OpenState == os {
+					value = 1
+				}
+				contactSensorOpenState.WithLabelValues(status.ID, string(os)).Set(value)
+			}
+			ab, err := status.Brightness.AmbientBrightness()
+			if err != nil {
+				log.Printf("error converting brightness: %v", err)
+			}
+			for _, b := range possibleAmbientBrightness {
+				var value float64
+
+				if ab == b {
+					value = 1
+				}
+				contactSensorBrightness.WithLabelValues(status.ID, string(b)).Set(value)
+			}
+
 		case switchbot.PlugMiniJP:
 			plugWeight := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: "switchbot",
